@@ -1,0 +1,12 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = linux*
+Target = mkinitcpio
+Target = grub
+
+[Action]
+Description = فحص سلامة الإقلاع بعد تحديث النواة/GRUB...
+When = PostTransaction
+Exec = /usr/local/bin/boot-sanity-check.sh --fix
