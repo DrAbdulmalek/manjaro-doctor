@@ -140,7 +140,7 @@ if [[ -f "$GRUB_CFG" ]]; then
             [[ "$JSON_MODE" == "false" ]] && echo "  $MAIN_ENTRY_LINE"
         else
             log_ok "الإدخال الرئيسي في grub.cfg يشير لمسار طبيعي (ليس لقطة)."
-        end
+        fi
     else
         log_warn "تعذر العثور على سطر 'linux' داخل menuentry الرئيسي لتحليله."
     fi
