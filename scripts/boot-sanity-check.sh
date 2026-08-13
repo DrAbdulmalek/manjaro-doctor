@@ -86,6 +86,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 2.5) هل الحل الوقائي الدائم مُفعّل في /etc/default/grub؟
+#      (rootflags=subvol=@ في GRUB_CMDLINE_LINUX_DEFAULT يمنع الانزلاق
+#       حتى لو أخطأت grub-mkconfig مستقبلاً في اكتشاف subvolume الحي وقت التشغيل)
+# ---------------------------------------------------------------------------
+GRUB_DEFAULT_FILE="/etc/default/grub"
+if [[ -f "$GRUB_DEFAULT_FILE" ]]; then
+    if grep -q "GRUB_CMDLINE_LINUX_DEFAULT=.*rootflags=subvol=@" "$GRUB_DEFAULT_FILE"; then
+        log_ok "الحل الوقائي الدائم (rootflags=subvol=@) مُفعّل في $GRUB_DEFAULT_FILE."
+    else
+        log_warn "الحل الوقائي الدائم غير مُفعّل بعد. أضف rootflags=subvol=@ إلى"
+        echo "  GRUB_CMDLINE_LINUX_DEFAULT في $GRUB_DEFAULT_FILE ثم شغّل grub-mkconfig."
+        echo "  هذا يمنع تكرار مشكلة 'kernel not found' حتى لو انزلق اكتشاف"
+        echo "  subvolume الحي في grub-mkconfig مستقبلاً."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 3) هل النواة المُشار إليها في grub.cfg موجودة فعلياً في /boot الحالي؟
 # ---------------------------------------------------------------------------
 if [[ -n "${MAIN_ENTRY_LINE:-}" ]]; then

@@ -129,3 +129,56 @@ findmnt /
 ```bash
 cd ~/your-project && git log --oneline -10 && git status
 ```
+
+## تحديث: تكرار المشكلة بعد تحديث لاحق + الحل النهائي الدائم
+
+رغم تطبيق الحل أعلاه وتثبيت `scripts/boot-sanity-check.sh` كـ pacman hook، **تكررت نفس المشكلة بالضبط** بعد تحديث نواة لاحق (`linux618` من 6.18.39 إلى 6.18.44)، بنفس الأعراض تماماً (`findmnt /` يُظهر الجذر مركّباً من داخل لقطة timeshift جديدة).
+
+### التحقيقات التي استبعدت أسباباً أخرى محتملة
+
+عند التكرار، جرّبنا نظريتين إضافيتين قبل الوصول للحل النهائي:
+
+**نظرية 1: `saved_entry` في GRUB يشير للقطة (مستبعدة)**
+```bash
+grep -E "GRUB_SAVEDEFAULT|GRUB_DEFAULT" /etc/default/grub
+sudo grub-editenv /boot/grub/grubenv list
+```
+النتيجة: `GRUB_SAVEDEFAULT=false` ولا يوجد `saved_entry` مسجّل أصلاً في `grubenv`. استبعاد كامل لهذا الاحتمال.
+
+**نظرية 2: btrfs default subvolume تغيّر عن `@` (مستبعدة)**
+```bash
+sudo btrfs subvolume get-default /
+```
+النتيجة: `291` (أي `@`) كان بالفعل هو default الصحيح على مستوى btrfs نفسه. استبعاد كامل أيضاً.
+
+### التفسير الأرجح للسبب الجذري
+
+بما أن كلا الاحتمالين أعلاه سليمان، يبقى التفسير الأرجح أن **`grub-mkconfig` لا يعتمد على `/etc/fstab` لتحديد `rootflags=subvol=...`، بل يقرأ subvolume الجلسة الحية وقت تشغيله فعلياً** (عبر آلية `grub-probe`/mountinfo). إذا تزامن تشغيل `grub-mkconfig` (كجزء من pacman hook بعد تحديث النواة) مع أي لحظة كانت فيها الجلسة الحية مرتبطة بلقطة (مثلاً مباشرة بعد أن يأخذ `timeshift-autosnap` لقطة جديدة "قبل الترقية")، فإن `grub.cfg` الناتج يُكتب فيه `rootflags=subvol=timeshift-btrfs/snapshots/.../@` بدل `subvol=@` — رغم أن كل الإعدادات الأخرى (fstab، btrfs default) سليمة تماماً طوال الوقت.
+
+لم نتمكن من تثبيت التوقيت الدقيق لهذا التزامن عبر `journalctl`، لكن الحل التالي **يجعل تحديد السبب الدقيق غير ضروري عملياً**.
+
+### الحل النهائي الدائم (يمنع التكرار بغض النظر عن السبب الدقيق)
+
+أضف `rootflags=subvol=@` صراحة داخل `GRUB_CMDLINE_LINUX_DEFAULT` في `/etc/default/grub`:
+
+```bash
+sudo nano /etc/default/grub
+```
+```
+GRUB_CMDLINE_LINUX_DEFAULT='quiet splash udev.log_priority=3 rootflags=subvol=@'
+```
+
+```bash
+sudo grub-mkconfig -o /boot/grub/grub.cfg
+sudo reboot
+```
+
+**لماذا هذا يحل المشكلة نهائياً:** في سطر `linux` النهائي داخل `menuentry`، يُدرَج `rootflags=subvol=X` المُكتَشَف تلقائياً أولاً، ثم يُلحَق محتوى `GRUB_CMDLINE_LINUX_DEFAULT` (بما فيه `rootflags=subvol=@` اليدوي) في آخر السطر. في معالجة خيارات mount عند تكرار نفس المفتاح (`subvol=`)، **القيمة الأخيرة في السلسلة هي التي تُطبَّق فعلياً** بغض النظر عن القيمة المكتشفة تلقائياً قبلها. هذا يجعل الإقلاع يشير دائماً لـ `@` الحقيقي، حتى لو أخطأت `grub-mkconfig` مستقبلاً في اكتشاف subvolume الحي وقت التشغيل.
+
+**تحقق بعد إعادة التشغيل:**
+```bash
+findmnt /
+# يجب أن يظهر: /dev/sda6[/@]  دائماً، بغض النظر عن أي تحديث لاحق
+```
+
+هذا الإصلاح تم التحقق منه عملياً بعد إعادة التشغيل التالية للتطبيق: `findmnt /` أظهر `/dev/sda6[/@]` مباشرة.
