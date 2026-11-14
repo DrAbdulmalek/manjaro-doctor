@@ -1,0 +1,27 @@
+# Secrets -- never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
+
+# Caches / logs / local state
+.cache/
+tmp/
+*.log
+logs/
+backups/
+*.bak
+*.tar.gz
+*.zip
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
